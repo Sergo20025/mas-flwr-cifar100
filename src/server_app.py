@@ -3,12 +3,16 @@ from __future__ import annotations
 import os
 
 import flwr as fl
-from flwr.common import Context, ndarrays_to_parameters
+from flwr.common import Context, ndarrays_to_parameters, parameters_to_ndarrays
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
 
+from src.agents.storage_agent import StorageAgent
 from src.model import get_model
-from src.utils import get_parameters
+from src.utils import get_parameters, set_parameters
+
+
+storage = StorageAgent()
 
 
 def fit_config(server_round: int):
@@ -46,6 +50,51 @@ def weighted_average(metrics):
     return aggregated
 
 
+class StorageFedAvg(FedAvg):
+    """FedAvg strategy with saving checkpoints and metrics."""
+
+    def __init__(self, model, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.model = model
+        self.history_data = {
+            "loss_distributed": [],
+            "metrics_distributed": {},
+        }
+
+    def aggregate_fit(self, server_round, results, failures):
+        aggregated_parameters, aggregated_metrics = super().aggregate_fit(
+            server_round, results, failures
+        )
+
+        if aggregated_parameters is not None:
+            ndarrays = parameters_to_ndarrays(aggregated_parameters)
+            set_parameters(self.model, ndarrays)
+            storage.save_checkpoint(server_round, self.model.state_dict())
+
+        return aggregated_parameters, aggregated_metrics
+
+    def aggregate_evaluate(self, server_round, results, failures):
+        aggregated_loss, aggregated_metrics = super().aggregate_evaluate(
+            server_round, results, failures
+        )
+
+        if aggregated_loss is not None:
+            self.history_data["loss_distributed"].append(
+                {"round": server_round, "loss": float(aggregated_loss)}
+            )
+
+        if aggregated_metrics:
+            for key, value in aggregated_metrics.items():
+                self.history_data["metrics_distributed"].setdefault(key, [])
+                self.history_data["metrics_distributed"][key].append(
+                    {"round": server_round, "value": float(value)}
+                )
+
+        storage.save_history(self.history_data)
+
+        return aggregated_loss, aggregated_metrics
+
+
 def server_fn(context: Context) -> ServerAppComponents:
     # Reduce log noise on Windows
     os.environ.setdefault("RAY_DISABLE_DASHBOARD", "1")
@@ -62,11 +111,16 @@ def server_fn(context: Context) -> ServerAppComponents:
     min_evaluate_clients = int(run_config["min-evaluate-clients"])
     min_available_clients = int(run_config["min-available-clients"])
 
-    # Initial model parameters
+    # Initial model
     model = get_model(num_classes=100)
+
+    # Save round 0 checkpoint
+    storage.save_checkpoint(0, model.state_dict())
+
     initial_parameters = ndarrays_to_parameters(get_parameters(model))
 
-    strategy = FedAvg(
+    strategy = StorageFedAvg(
+        model=model,
         fraction_fit=fraction_fit,
         fraction_evaluate=fraction_evaluate,
         min_fit_clients=min_fit_clients,
