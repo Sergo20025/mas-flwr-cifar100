@@ -1,57 +1,26 @@
 from __future__ import annotations
 
-import hashlib
-from typing import Any
-
-import torch
-from flwr.app import ArrayRecord, Context, Message, MetricRecord
-from flwr.clientapp import ClientApp
 from flwr.client import NumPyClient
+from flwr.clientapp import ClientApp
+from flwr.common import Context
 
-from src.data import load_cifar100_iid
-from src.model import get_device, get_model
-from src.train import evaluate, train_one_epoch
-from src.utils import get_parameters, set_parameters
-
-
-def _normalize_cid(cid_raw: Any, num_clients: int) -> int:
-    s = str(cid_raw)
-    h = hashlib.sha1(s.encode("utf-8")).hexdigest()
-    return int(h, 16) % num_clients
+from src.agents.compute_agent import ComputeAgent
 
 
 class CifarClient(NumPyClient):
-    def __init__(self, cid_raw: Any, num_clients: int = 10, batch_size: int = 64):
-        self.num_clients = int(num_clients)
-        self.cid = _normalize_cid(cid_raw, self.num_clients)
-
-        self.device = get_device()
-        self.model = get_model(num_classes=100).to(self.device)
-
-        self.data = load_cifar100_iid(
-            client_id=self.cid,
-            num_clients=self.num_clients,
-            batch_size=int(batch_size),
-        )
+    def __init__(self, agent: ComputeAgent):
+        self.agent = agent
 
     def get_parameters(self, config):
-        return get_parameters(self.model)
+        return self.agent.get_parameters()
 
     def fit(self, parameters, config):
-        set_parameters(self.model, parameters)
-
         local_epochs = int(config.get("local_epochs", 1))
         lr = float(config.get("lr", 0.01))
-
-        for _ in range(local_epochs):
-            train_one_epoch(self.model, self.data.train_loader, self.device, lr=lr)
-
-        return get_parameters(self.model), self.data.num_train, {}
+        return self.agent.fit(parameters, local_epochs=local_epochs, lr=lr)
 
     def evaluate(self, parameters, config):
-        set_parameters(self.model, parameters)
-        loss, acc = evaluate(self.model, self.data.test_loader, self.device)
-        return float(loss), self.data.num_test, {"accuracy": float(acc)}
+        return self.agent.evaluate(parameters)
 
 
 def client_fn(context: Context):
@@ -69,11 +38,13 @@ def client_fn(context: Context):
     if cid_raw is None:
         cid_raw = getattr(context, "node_id", "0")
 
-    return CifarClient(
+    agent = ComputeAgent(
         cid_raw=cid_raw,
         num_clients=num_clients,
         batch_size=batch_size,
-    ).to_client()
+    )
+
+    return CifarClient(agent).to_client()
 
 
 app = ClientApp(client_fn=client_fn)
