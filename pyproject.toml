@@ -1,0 +1,53 @@
+[project]
+name = "mas-flwr-cifar100"
+version = "0.1.0"
+description = "Multi-agent federated learning system for CIFAR-100 using Flower"
+authors = [
+  { name = "Sergey" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+dependencies = [
+  "flwr>=1.8.0",
+  "torch>=2.0.0",
+  "torchvision>=0.15.0",
+  "numpy>=1.24.0",
+  "matplotlib>=3.7.0",
+  "datasets>=2.16.0",
+  "tqdm>=4.66.0"
+]
+
+[tool.flwr.app]
+publisher = "sergey"
+
+[tool.flwr.app.components]
+serverapp = "src.server_app:app"
+clientapp = "src.client_app:app"
+
+[tool.flwr.app.config]
+num-server-rounds = 20
+num-clients = 10
+
+fraction-fit = 1.0
+fraction-evaluate = 0.0
+
+min-fit-clients = 10
+min-evaluate-clients = 0
+min-available-clients = 10
+
+batch-size = 128
+local-epochs = 5
+learning-rate = 0.03
+seed = 42
+
+[build-system]
+requires = ["hatchling>=1.26.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.build.targets.editable]
+packages = ["src"]

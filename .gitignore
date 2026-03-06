@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Dataset
+data/
+# Env
+.venv/
+venv/
+env/
+.conda/
+.ipynb_checkpoints/
+
+# Logs / runs
+runs/
+checkpoints/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

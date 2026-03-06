@@ -1,0 +1,17 @@
+name: masflwr
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cpuonly
+  - pip:
+      - flwr
+      - datasets
+      - tqdm
+      - scikit-learn
