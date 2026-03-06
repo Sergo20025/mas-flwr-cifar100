@@ -1,18 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+<<<<<<< HEAD
 from pathlib import Path
 
 import numpy as np
 import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader, Dataset, Subset
+=======
+import numpy as np
+import torch
+from datasets import load_dataset
+from torch.utils.data import DataLoader, Subset
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
 from torchvision import transforms
 
 
 @dataclass
 class ClientData:
     train_loader: DataLoader
+<<<<<<< HEAD
     num_train: int
 
 
@@ -44,6 +52,57 @@ def _get_transforms():
     std = (0.2675, 0.2565, 0.2761)
 
     train_transform = transforms.Compose(
+=======
+    test_loader: DataLoader
+    num_train: int
+    num_test: int
+
+
+def _set_seed(seed: int) -> None:
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def _hf_to_torch_dataset(hf_ds, transform):
+    """Wrap Hugging Face dataset to return (tensor_image, label)."""
+
+    class _Wrapper(torch.utils.data.Dataset):
+        def __init__(self, ds, tfm):
+            self.ds = ds
+            self.tfm = tfm
+
+        def __len__(self):
+            return len(self.ds)
+
+        def __getitem__(self, idx):
+            item = self.ds[int(idx)]
+            img = item["img"]  # PIL image
+            y = int(item["fine_label"])
+            x = self.tfm(img)
+            return x, y
+
+    return _Wrapper(hf_ds, transform)
+
+
+def load_cifar100_iid(
+    client_id: int,
+    num_clients: int = 10,
+    batch_size: int = 64,
+    seed: int = 42,
+    num_workers: int = 0,
+) -> ClientData:
+    assert 0 <= client_id < num_clients, "client_id out of range"
+    _set_seed(seed)
+
+    ds = load_dataset("uoft-cs/cifar100")
+
+    # CIFAR-100 mean/std
+    mean = (0.5071, 0.4867, 0.4408)
+    std = (0.2675, 0.2565, 0.2761)
+
+    # Более сильный train augmentation
+    train_tfm = transforms.Compose(
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
         [
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
@@ -52,12 +111,17 @@ def _get_transforms():
         ]
     )
 
+<<<<<<< HEAD
     test_transform = transforms.Compose(
+=======
+    test_tfm = transforms.Compose(
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
         [
             transforms.ToTensor(),
             transforms.Normalize(mean, std),
         ]
     )
+<<<<<<< HEAD
     return train_transform, test_transform
 
 
@@ -84,6 +148,19 @@ def load_cifar100_iid(
     client_indices = split_indices[client_id].tolist()
 
     train_subset = Subset(HFDatasetWrapper(train_hf, train_transform), client_indices)
+=======
+
+    train_ds = _hf_to_torch_dataset(ds["train"], train_tfm)
+    test_ds = _hf_to_torch_dataset(ds["test"], test_tfm)
+
+    n_train = len(train_ds)
+    indices = np.arange(n_train)
+    np.random.shuffle(indices)
+    splits = np.array_split(indices, num_clients)
+    client_indices = splits[client_id].tolist()
+
+    train_subset = Subset(train_ds, client_indices)
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
 
     train_loader = DataLoader(
         train_subset,
@@ -93,6 +170,7 @@ def load_cifar100_iid(
         pin_memory=torch.cuda.is_available(),
     )
 
+<<<<<<< HEAD
     return ClientData(
         train_loader=train_loader,
         num_train=len(train_subset),
@@ -111,9 +189,23 @@ def load_server_test_loader(
 
     test_loader = DataLoader(
         test_dataset,
+=======
+    test_loader = DataLoader(
+        test_ds,
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
     )
+<<<<<<< HEAD
     return test_loader
+=======
+
+    return ClientData(
+        train_loader=train_loader,
+        test_loader=test_loader,
+        num_train=len(train_subset),
+        num_test=len(test_ds),
+    )
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25

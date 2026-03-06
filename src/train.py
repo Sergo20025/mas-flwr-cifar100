@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
 from typing import Dict, List
 
+=======
+from typing import Tuple
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
 
+<<<<<<< HEAD
 def train_local(
     model: nn.Module,
     loader: DataLoader,
@@ -21,11 +26,25 @@ def train_local(
 
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
+=======
+def train_one_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    lr: float = 0.01,
+    momentum: float = 0.9,
+    weight_decay: float = 5e-4,
+) -> float:
+    model.train()
+
+    criterion = nn.CrossEntropyLoss()
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
     optimizer = torch.optim.SGD(
         model.parameters(),
         lr=lr,
         momentum=momentum,
         weight_decay=weight_decay,
+<<<<<<< HEAD
         nesterov=True,
     )
 
@@ -71,6 +90,34 @@ def train_local(
         "train_loss_mean": float(sum(epoch_losses) / len(epoch_losses)),
         "epoch_losses": epoch_losses,
     }
+=======
+    )
+
+    # scheduler на одну локальную эпоху не особо нужен,
+    # но он пригодится когда local_epochs > 1
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(len(loader), 1)
+    )
+
+    total_loss = 0.0
+    total = 0
+
+    for x, y in loader:
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+
+        optimizer.zero_grad(set_to_none=True)
+        logits = model(x)
+        loss = criterion(logits, y)
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        total_loss += loss.item() * x.size(0)
+        total += x.size(0)
+
+    return total_loss / max(total, 1)
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
 
 
 @torch.no_grad()
@@ -78,6 +125,7 @@ def evaluate(
     model: nn.Module,
     loader: DataLoader,
     device: torch.device,
+<<<<<<< HEAD
     num_classes: int = 100,
 ) -> Dict[str, float]:
     model.eval()
@@ -136,3 +184,26 @@ def evaluate(
         "f1_macro": float(f1_macro),
         "f1_weighted": float(f1_weighted),
     }
+=======
+) -> Tuple[float, float]:
+    model.eval()
+    criterion = nn.CrossEntropyLoss()
+
+    total_loss = 0.0
+    correct = 0
+    total = 0
+
+    for x, y in loader:
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+
+        logits = model(x)
+        loss = criterion(logits, y)
+
+        total_loss += loss.item() * x.size(0)
+        pred = logits.argmax(dim=1)
+        correct += (pred == y).sum().item()
+        total += x.size(0)
+
+    return total_loss / max(total, 1), correct / max(total, 1)
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25

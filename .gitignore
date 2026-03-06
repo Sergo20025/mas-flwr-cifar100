@@ -7,8 +7,11 @@ __pycache__/
 dist/
 build/
 
+<<<<<<< HEAD
 # Dataset
 data/
+=======
+>>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
 # Env
 .venv/
 venv/
