@@ -5,19 +5,21 @@ build-backend = "hatchling.build"
 [project]
 name = "mas-flwr-cifar100"
 version = "0.1.0"
-description = "Flower CIFAR100 simulation with PyTorch"
-license = "Apache-2.0"
-dependencies = [
-    "flwr[simulation]>=1.26.0",
-    "torch",
-    "torchvision",
-    "datasets",
-    "tqdm",
-    "scikit-learn",
+description = "Multi-agent federated learning system for CIFAR-100 using Flower"
+authors = [
+  { name = "Sergey" }
 ]
+requires-python = ">=3.10"
 
-[tool.hatch.build.targets.wheel]
-packages = ["."]
+dependencies = [
+  "flwr>=1.26.0",
+  "torch",
+  "torchvision",
+  "numpy",
+  "matplotlib",
+  "datasets",
+  "huggingface_hub"
+]
 
 [tool.flwr.app]
 publisher = "sergey"
@@ -27,16 +29,26 @@ serverapp = "src.server_app:app"
 clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 5
-fraction-fit = 0.5
-fraction-evaluate = 0.5
-min-fit-clients = 5
-min-evaluate-clients = 5
-min-available-clients = 10
+
+# количество раундов FL
+num-server-rounds = 15
+
+# количество клиентов
 num-clients = 10
+
+# доля участвующих клиентов
+fraction-fit = 1.0
+fraction-evaluate = 1.0
+
+min-fit-clients = 10
+min-evaluate-clients = 10
+min-available-clients = 10
+
+# параметры локального обучения
 batch-size = 64
 local-epochs = 1
-learning-rate = 0.01
+learning-rate = 0.001
+
 
 
 #######################################################################
@@ -55,11 +67,16 @@ learning-rate = 0.01
 #######################################################################
 
 # [tool.flwr.federations]
+
+# # делаем локальную симуляцию дефолтной
 # default = "local-simulation"
 
 # [tool.flwr.federations.local-simulation]
 # options.num-supernodes = 10
 
-# [tool.flwr.federations.local-simulation.options.backend]
-# client-resources.num-cpus = 2
-# client-resources.num-gpus = 0.1
+# [tool.flwr.federations.local-simulation.backend]
+# name = "ray"
+
+# [tool.flwr.federations.local-simulation.backend.client-resources]
+# num-cpus = 2
+# num-gpus = 0.1

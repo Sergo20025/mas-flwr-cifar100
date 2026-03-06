@@ -24,6 +24,7 @@ class AggregationAgent:
             "loss_distributed": [],
             "metrics_distributed": {},
         }
+        self.best_accuracy = -1.0
 
     def weighted_average(self, metrics):
         """Aggregate numeric metrics weighted by number of examples."""
@@ -67,7 +68,7 @@ class AggregationAgent:
         aggregated_loss: float | None,
         aggregated_metrics: dict[str, Any] | None,
     ) -> None:
-        """Save aggregated evaluation history."""
+        """Save aggregated evaluation history and best checkpoint."""
         if aggregated_loss is not None:
             self.history_data["loss_distributed"].append(
                 {"round": server_round, "loss": float(aggregated_loss)}
@@ -80,6 +81,11 @@ class AggregationAgent:
                     self.history_data["metrics_distributed"][key].append(
                         {"round": server_round, "value": float(value)}
                     )
+
+            current_acc = aggregated_metrics.get("accuracy")
+            if isinstance(current_acc, (int, float)) and float(current_acc) > self.best_accuracy:
+                self.best_accuracy = float(current_acc)
+                self.storage.save_best_checkpoint(self.model.state_dict())
 
         self.storage.save_history(self.history_data)
 

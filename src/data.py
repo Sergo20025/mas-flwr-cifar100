@@ -22,7 +22,8 @@ def _set_seed(seed: int) -> None:
 
 
 def _hf_to_torch_dataset(hf_ds, transform):
-    """Wrap HF dataset to return (tensor_image, label)."""
+    """Wrap Hugging Face dataset to return (tensor_image, label)."""
+
     class _Wrapper(torch.utils.data.Dataset):
         def __init__(self, ds, tfm):
             self.ds = ds
@@ -33,7 +34,7 @@ def _hf_to_torch_dataset(hf_ds, transform):
 
         def __getitem__(self, idx):
             item = self.ds[int(idx)]
-            img = item["img"]  # PIL
+            img = item["img"]  # PIL image
             y = int(item["fine_label"])
             x = self.tfm(img)
             return x, y
@@ -53,16 +54,26 @@ def load_cifar100_iid(
 
     ds = load_dataset("uoft-cs/cifar100")
 
-    train_tfm = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-    ])
-    test_tfm = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-    ])
+    # CIFAR-100 mean/std
+    mean = (0.5071, 0.4867, 0.4408)
+    std = (0.2675, 0.2565, 0.2761)
+
+    # Более сильный train augmentation
+    train_tfm = transforms.Compose(
+        [
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
+
+    test_tfm = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
 
     train_ds = _hf_to_torch_dataset(ds["train"], train_tfm)
     test_ds = _hf_to_torch_dataset(ds["test"], test_tfm)
@@ -82,6 +93,7 @@ def load_cifar100_iid(
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
     )
+
     test_loader = DataLoader(
         test_ds,
         batch_size=batch_size,

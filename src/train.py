@@ -15,6 +15,7 @@ def train_one_epoch(
     weight_decay: float = 5e-4,
 ) -> float:
     model.train()
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(
         model.parameters(),
@@ -23,16 +24,25 @@ def train_one_epoch(
         weight_decay=weight_decay,
     )
 
+    # scheduler на одну локальную эпоху не особо нужен,
+    # но он пригодится когда local_epochs > 1
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=max(len(loader), 1)
+    )
+
     total_loss = 0.0
     total = 0
 
     for x, y in loader:
-        x, y = x.to(device), y.to(device)
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+
         optimizer.zero_grad(set_to_none=True)
         logits = model(x)
         loss = criterion(logits, y)
         loss.backward()
         optimizer.step()
+        scheduler.step()
 
         total_loss += loss.item() * x.size(0)
         total += x.size(0)
@@ -41,7 +51,11 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> Tuple[float, float]:
+def evaluate(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> Tuple[float, float]:
     model.eval()
     criterion = nn.CrossEntropyLoss()
 
@@ -50,7 +64,9 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> Tupl
     total = 0
 
     for x, y in loader:
-        x, y = x.to(device), y.to(device)
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
+
         logits = model(x)
         loss = criterion(logits, y)
 
