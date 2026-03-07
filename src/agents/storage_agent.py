@@ -6,7 +6,6 @@ from typing import Any
 
 import torch
 
-<<<<<<< HEAD
 from src.data import ClientData, load_cifar100_iid
 from src.logger import get_logger
 
@@ -19,11 +18,6 @@ class StorageAgent:
     ) -> None:
         self.logger = get_logger("StorageAgent")
 
-=======
-
-class StorageAgent:
-    def __init__(self, runs_dir: str = "runs", ckpt_dir: str = "checkpoints") -> None:
->>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
         self.runs_dir = Path(runs_dir)
         self.ckpt_dir = Path(ckpt_dir)
 
@@ -32,7 +26,6 @@ class StorageAgent:
 
         self.history_path = self.runs_dir / "history.json"
 
-<<<<<<< HEAD
         self.logger.info(
             f"Initialized | runs_dir={self.runs_dir} | ckpt_dir={self.ckpt_dir}"
         )
@@ -66,26 +59,15 @@ class StorageAgent:
         with open(self.history_path, "w", encoding="utf-8") as f:
             json.dump(history, f, ensure_ascii=False, indent=2)
         self.logger.info(f"History saved | path={self.history_path}")
-=======
-    def save_history(self, history: dict[str, Any]) -> None:
-        with open(self.history_path, "w", encoding="utf-8") as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
->>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
 
     def save_checkpoint(self, round_num: int, model_state_dict: dict[str, Any]) -> str:
         ckpt_path = self.ckpt_dir / f"round_{round_num}.pt"
         torch.save(model_state_dict, ckpt_path)
-<<<<<<< HEAD
         self.logger.info(f"Checkpoint saved | round={round_num} | path={ckpt_path}")
-=======
->>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
         return str(ckpt_path)
 
     def save_best_checkpoint(self, model_state_dict: dict[str, Any]) -> str:
         ckpt_path = self.ckpt_dir / "best_model.pt"
         torch.save(model_state_dict, ckpt_path)
-<<<<<<< HEAD
         self.logger.info(f"Best checkpoint updated | path={ckpt_path}")
-=======
->>>>>>> 0a736d8f481586f99da1faeedb3b3e80bfaa5e25
         return str(ckpt_path)
