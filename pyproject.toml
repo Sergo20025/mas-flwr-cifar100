@@ -46,6 +46,8 @@ learning-rate = 0.05
 seed = 42
 min-update-norm = 0.000000
 decentralized-mode = true
+partition-mode = "dirichlet"
+dirichlet-alpha = 0.5
 
 [build-system]
 requires = ["hatchling>=1.26.0"]

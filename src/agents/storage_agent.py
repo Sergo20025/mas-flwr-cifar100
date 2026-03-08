@@ -6,7 +6,7 @@ from typing import Any
 
 import torch
 
-from src.data import ClientData, load_cifar100_iid
+from src.data import ClientData, load_cifar100_partitioned
 from src.logger import get_logger
 
 
@@ -37,17 +37,24 @@ class StorageAgent:
         batch_size: int,
         seed: int = 42,
         num_workers: int = 0,
+        partition_mode: str = "iid",
+        dirichlet_alpha: float = 0.3,
     ) -> ClientData:
         self.logger.info(
-            f"Preparing client data | client_id={client_id} | num_clients={num_clients} | batch_size={batch_size}"
+            "Preparing client data | "
+            f"client_id={client_id} | num_clients={num_clients} | "
+            f"batch_size={batch_size} | partition_mode={partition_mode} | "
+            f"dirichlet_alpha={dirichlet_alpha}"
         )
 
-        data = load_cifar100_iid(
+        data = load_cifar100_partitioned(
             client_id=client_id,
             num_clients=num_clients,
             batch_size=batch_size,
             seed=seed,
             num_workers=num_workers,
+            partition_mode=partition_mode,
+            dirichlet_alpha=dirichlet_alpha,
         )
 
         self.logger.info(

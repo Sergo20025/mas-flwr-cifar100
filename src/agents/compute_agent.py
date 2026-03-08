@@ -18,6 +18,8 @@ class ComputeAgent:
         num_clients: int = 10,
         batch_size: int = 64,
         seed: int = 42,
+        partition_mode: str = "iid",
+        dirichlet_alpha: float = 0.3,
         storage: StorageAgent | None = None,
     ):
         self.num_clients = int(num_clients)
@@ -40,6 +42,8 @@ class ComputeAgent:
             batch_size=int(batch_size),
             seed=seed,
             num_workers=0,
+            partition_mode=partition_mode,
+            dirichlet_alpha=dirichlet_alpha,
         )
 
         self.logger.info(

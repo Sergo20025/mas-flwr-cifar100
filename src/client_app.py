@@ -43,6 +43,8 @@ def client_fn(context: Context):
     num_clients = int(run_cfg["num-clients"])
     batch_size = int(run_cfg["batch-size"])
     seed = int(run_cfg.get("seed", 42))
+    partition_mode = str(run_cfg.get("partition-mode", "iid"))
+    dirichlet_alpha = float(run_cfg.get("dirichlet-alpha", 0.3))
 
     partition_id = None
     try:
@@ -56,7 +58,10 @@ def client_fn(context: Context):
     partition_id = int(partition_id)
 
     logger.info(
-        f"Starting client | raw_partition_id={partition_id} | num_clients={num_clients} | batch_size={batch_size}"
+        "Starting client | "
+        f"raw_partition_id={partition_id} | num_clients={num_clients} | "
+        f"batch_size={batch_size} | partition_mode={partition_mode} | "
+        f"dirichlet_alpha={dirichlet_alpha}"
     )
 
     agent = ComputeAgent(
@@ -64,6 +69,8 @@ def client_fn(context: Context):
         num_clients=num_clients,
         batch_size=batch_size,
         seed=seed,
+        partition_mode=partition_mode,
+        dirichlet_alpha=dirichlet_alpha,
     )
 
     logger.info(f"Client initialized | partition={agent.cid}")

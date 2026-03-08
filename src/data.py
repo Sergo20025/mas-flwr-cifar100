@@ -62,12 +62,80 @@ def _get_transforms():
     return train_transform, test_transform
 
 
+def _partition_iid_indices(
+    num_samples: int,
+    num_clients: int,
+    seed: int,
+) -> list[list[int]]:
+    all_indices = np.arange(num_samples)
+    rng = np.random.RandomState(seed)
+    rng.shuffle(all_indices)
+    return [split.tolist() for split in np.array_split(all_indices, num_clients)]
+
+
+def _partition_dirichlet_indices(
+    labels: np.ndarray,
+    num_clients: int,
+    alpha: float,
+    seed: int,
+    min_size: int = 10,
+    max_retries: int = 20,
+) -> list[list[int]]:
+    if alpha <= 0:
+        raise ValueError(f"dirichlet alpha must be > 0, got {alpha}")
+
+    rng = np.random.RandomState(seed)
+    num_classes = int(labels.max()) + 1
+    indices = np.arange(labels.shape[0])
+
+    for _ in range(max_retries):
+        client_indices: list[list[int]] = [[] for _ in range(num_clients)]
+
+        for class_id in range(num_classes):
+            class_indices = indices[labels == class_id]
+            rng.shuffle(class_indices)
+
+            proportions = rng.dirichlet(np.repeat(alpha, num_clients))
+            split_points = (np.cumsum(proportions) * len(class_indices)).astype(int)[:-1]
+            class_splits = np.split(class_indices, split_points)
+
+            for client_id, class_split in enumerate(class_splits):
+                if class_split.size > 0:
+                    client_indices[client_id].extend(class_split.tolist())
+
+        min_client_size = min(len(x) for x in client_indices)
+        if min_client_size >= min_size:
+            return client_indices
+
+    return client_indices
+
+
 def load_cifar100_iid(
     client_id: int,
     num_clients: int,
     batch_size: int = 64,
     num_workers: int = 0,
     seed: int = 42,
+) -> ClientData:
+    return load_cifar100_partitioned(
+        client_id=client_id,
+        num_clients=num_clients,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        seed=seed,
+        partition_mode="iid",
+        dirichlet_alpha=0.5,
+    )
+
+
+def load_cifar100_partitioned(
+    client_id: int,
+    num_clients: int,
+    batch_size: int = 64,
+    num_workers: int = 0,
+    seed: int = 42,
+    partition_mode: str = "iid",
+    dirichlet_alpha: float = 0.3,
 ) -> ClientData:
     dataset = _load_dataset()
     train_hf = dataset["train"]
@@ -79,12 +147,27 @@ def load_cifar100_iid(
 
     train_transform, _ = _get_transforms()
 
-    all_indices = np.arange(len(train_hf))
-    rng = np.random.RandomState(seed)
-    rng.shuffle(all_indices)
+    mode = partition_mode.strip().lower()
+    if mode == "iid":
+        split_indices = _partition_iid_indices(
+            num_samples=len(train_hf),
+            num_clients=num_clients,
+            seed=seed,
+        )
+    elif mode in {"dirichlet", "non-iid", "noniid"}:
+        labels = np.asarray(train_hf["fine_label"], dtype=np.int64)
+        split_indices = _partition_dirichlet_indices(
+            labels=labels,
+            num_clients=num_clients,
+            alpha=float(dirichlet_alpha),
+            seed=seed,
+        )
+    else:
+        raise ValueError(
+            f"Unknown partition_mode '{partition_mode}'. Use 'iid' or 'dirichlet'."
+        )
 
-    split_indices = np.array_split(all_indices, num_clients)
-    client_indices = split_indices[client_id].tolist()
+    client_indices = split_indices[client_id]
 
     train_dataset = HFDatasetWrapper(train_hf, train_transform)
     train_subset = Subset(train_dataset, client_indices)

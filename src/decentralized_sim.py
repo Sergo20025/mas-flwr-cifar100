@@ -77,6 +77,8 @@ def main() -> None:
     lr = float(cfg.get("learning-rate", 0.03))
     seed = int(cfg.get("seed", 42))
     min_delta_norm = float(cfg.get("min-update-norm", 0.0))
+    partition_mode = str(cfg.get("partition-mode", "iid"))
+    dirichlet_alpha = float(cfg.get("dirichlet-alpha", 0.3))
 
     logger.info(
         "Decentralized FL start | "
@@ -108,6 +110,8 @@ def main() -> None:
             num_clients=num_nodes,
             batch_size=batch_size,
             seed=seed,
+            partition_mode=partition_mode,
+            dirichlet_alpha=dirichlet_alpha,
             storage=node_storage,
         )
         params = _clone_params(initial_params)
