@@ -15,7 +15,7 @@ def train_local(
     lr: float = 0.03,
     momentum: float = 0.9,
     weight_decay: float = 5e-4,
-    label_smoothing: float = 0.1,
+    label_smoothing: float = 0.05,
 ) -> Dict[str, float | List[float]]:
     model.train()
 

@@ -19,6 +19,9 @@ dependencies = [
   "tqdm>=4.66.0"
 ]
 
+[project.scripts]
+decentralized-train = "src.decentralized_sim:main"
+
 [tool.flwr.app]
 publisher = "sergey"
 
@@ -27,7 +30,7 @@ serverapp = "src.server_app:app"
 clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
-num-server-rounds = 20
+num-server-rounds = 50
 num-clients = 10
 
 fraction-fit = 1.0
@@ -39,8 +42,10 @@ min-available-clients = 10
 
 batch-size = 128
 local-epochs = 5
-learning-rate = 0.03
+learning-rate = 0.05
 seed = 42
+min-update-norm = 0.000000
+decentralized-mode = true
 
 [build-system]
 requires = ["hatchling>=1.26.0"]

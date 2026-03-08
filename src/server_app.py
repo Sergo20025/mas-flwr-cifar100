@@ -3,7 +3,11 @@ from __future__ import annotations
 from flwr.common import Context, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 
-from src.agents.aggregation_agent import AggregationAgent, AgentFedAvg
+from src.agents.aggregation_agent import (
+    AgentDecentralizedFlower,
+    AgentFedAvg,
+    AggregationAgent,
+)
 from src.agents.storage_agent import StorageAgent
 from src.data import load_server_test_loader
 from src.logger import get_logger
@@ -16,6 +20,13 @@ storage = StorageAgent()
 logger = get_logger("ServerApp")
 
 
+def _to_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "y", "on"}
+
+
 def server_fn(context: Context) -> ServerAppComponents:
     run_config = context.run_config
 
@@ -26,9 +37,15 @@ def server_fn(context: Context) -> ServerAppComponents:
 
     local_epochs = int(run_config["local-epochs"])
     learning_rate = float(run_config["learning-rate"])
+    decentralized_mode = _to_bool(run_config.get("decentralized-mode", "true"))
+    min_update_norm = float(run_config.get("min-update-norm", 0.0))
+    num_clients = int(run_config["num-clients"])
 
     logger.info(
         f"Server initialized | rounds={num_rounds} | lr={learning_rate} | local_epochs={local_epochs}"
+    )
+    logger.info(
+        f"Training mode | decentralized_mode={decentralized_mode} | min_update_norm={min_update_norm}"
     )
 
     device = get_device()
@@ -85,18 +102,34 @@ def server_fn(context: Context) -> ServerAppComponents:
             "f1_weighted": float(metrics["f1_weighted"]),
         }
 
-    strategy = AgentFedAvg(
-        aggregation_agent=aggregation_agent,
-        fraction_fit=fraction_fit,
-        fraction_evaluate=0.0,
-        min_fit_clients=min_fit_clients,
-        min_evaluate_clients=0,
-        min_available_clients=min_available_clients,
-        on_fit_config_fn=fit_config,
-        fit_metrics_aggregation_fn=aggregation_agent.weighted_average,
-        evaluate_fn=server_evaluate,
-        initial_parameters=initial_parameters,
-    )
+    if decentralized_mode:
+        strategy = AgentDecentralizedFlower(
+            aggregation_agent=aggregation_agent,
+            num_nodes=num_clients,
+            min_update_norm=min_update_norm,
+            fraction_fit=fraction_fit,
+            fraction_evaluate=0.0,
+            min_fit_clients=min_fit_clients,
+            min_evaluate_clients=0,
+            min_available_clients=min_available_clients,
+            on_fit_config_fn=fit_config,
+            fit_metrics_aggregation_fn=aggregation_agent.weighted_average,
+            evaluate_fn=server_evaluate,
+            initial_parameters=initial_parameters,
+        )
+    else:
+        strategy = AgentFedAvg(
+            aggregation_agent=aggregation_agent,
+            fraction_fit=fraction_fit,
+            fraction_evaluate=0.0,
+            min_fit_clients=min_fit_clients,
+            min_evaluate_clients=0,
+            min_available_clients=min_available_clients,
+            on_fit_config_fn=fit_config,
+            fit_metrics_aggregation_fn=aggregation_agent.weighted_average,
+            evaluate_fn=server_evaluate,
+            initial_parameters=initial_parameters,
+        )
 
     config = ServerConfig(num_rounds=num_rounds)
 

@@ -100,7 +100,7 @@ class WideResNet(nn.Module):
         self,
         depth: int = 28,
         widen_factor: int = 10,
-        dropout_rate: float = 0.3,
+        dropout_rate: float = 0.1,
         num_classes: int = 100,
     ) -> None:
         super().__init__()
@@ -181,6 +181,6 @@ def get_model(num_classes: int = 100) -> nn.Module:
     return WideResNet(
         depth=28,
         widen_factor=10,
-        dropout_rate=0.3,
+        dropout_rate=0.1,
         num_classes=num_classes,
     )

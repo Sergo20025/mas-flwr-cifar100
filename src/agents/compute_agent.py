@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import torch
+
 from src.agents.storage_agent import StorageAgent
 from src.logger import get_logger
 from src.model import get_device, get_model
@@ -16,19 +18,22 @@ class ComputeAgent:
         num_clients: int = 10,
         batch_size: int = 64,
         seed: int = 42,
+        storage: StorageAgent | None = None,
     ):
         self.num_clients = int(num_clients)
         self.cid = int(cid_raw)
 
         self.logger = get_logger(f"ComputeAgent[{self.cid}]")
         self.device = get_device()
-        self.model = get_model(num_classes=100).to(self.device)
+        # Keep model on CPU and move to GPU only during local training.
+        # This enables sequential training of many agents on one GPU.
+        self.model = get_model(num_classes=100).cpu()
 
         self.logger.info(
             f"Initialized | raw_cid={cid_raw} | partition={self.cid} | device={self.device}"
         )
 
-        self.storage = StorageAgent()
+        self.storage = storage or StorageAgent()
         self.data = self.storage.get_client_data(
             client_id=self.cid,
             num_clients=self.num_clients,
@@ -58,6 +63,7 @@ class ComputeAgent:
         self.logger.info("Received global model")
 
         set_parameters(self.model, parameters)
+        self.model.to(self.device)
 
         metrics = train_local(
             model=self.model,
@@ -66,6 +72,9 @@ class ComputeAgent:
             local_epochs=local_epochs,
             lr=lr,
         )
+        self.model.cpu()
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
 
         epoch_losses = metrics["epoch_losses"]
         for epoch_idx, epoch_loss in enumerate(epoch_losses, start=1):
@@ -84,4 +93,5 @@ class ComputeAgent:
 
         return self.get_parameters(), self.data.num_train, {
             "train_loss": float(metrics["train_loss_last"]),
+            "cid": int(self.cid),
         }
