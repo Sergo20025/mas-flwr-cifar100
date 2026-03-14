@@ -1,3 +1,5 @@
+"""Утилита для единообразного логирования во всех модулях проекта."""
+
 from __future__ import annotations
 
 import logging
@@ -5,6 +7,7 @@ import sys
 
 
 def get_logger(name: str) -> logging.Logger:
+    # Переиспользуем уже созданный логгер, чтобы не дублировать обработчики.
     logger = logging.getLogger(name)
 
     if logger.handlers:

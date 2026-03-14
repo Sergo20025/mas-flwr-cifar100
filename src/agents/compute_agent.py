@@ -1,3 +1,5 @@
+"""Агент вычислений: локальный train модели на клиенте."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -27,8 +29,8 @@ class ComputeAgent:
 
         self.logger = get_logger(f"ComputeAgent[{self.cid}]")
         self.device = get_device()
-        # Keep model on CPU and move to GPU only during local training.
-        # This enables sequential training of many agents on one GPU.
+        # Держим модель на CPU и переносим на GPU только на время fit.
+        # Это позволяет последовательно обучать много клиентов на одной видеокарте.
         self.model = get_model(num_classes=100).cpu()
 
         self.logger.info(
@@ -61,6 +63,7 @@ class ComputeAgent:
         lr: float = 0.01,
         round_num: int = -1,
     ):
+        # Получаем параметры текущей узловой/глобальной модели.
         self.logger.info(
             f"FIT START | round={round_num} | partition={self.cid}"
         )
@@ -76,6 +79,7 @@ class ComputeAgent:
             local_epochs=local_epochs,
             lr=lr,
         )
+        # Освобождаем память GPU после локального обучения.
         self.model.cpu()
         if self.device.type == "cuda":
             torch.cuda.empty_cache()

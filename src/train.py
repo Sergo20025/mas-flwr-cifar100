@@ -1,3 +1,5 @@
+"""Локальное обучение и серверная оценка модели."""
+
 from __future__ import annotations
 
 from typing import Dict, List
@@ -17,6 +19,7 @@ def train_local(
     weight_decay: float = 5e-4,
     label_smoothing: float = 0.05,
 ) -> Dict[str, float | List[float]]:
+    # Локальный train на одном клиенте.
     model.train()
 
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
@@ -49,6 +52,7 @@ def train_local(
 
             optimizer.zero_grad(set_to_none=True)
 
+            # AMP ускоряет обучение на GPU и снижает потребление памяти.
             with torch.amp.autocast("cuda", enabled=use_amp):
                 logits = model(images)
                 loss = criterion(logits, labels)
@@ -80,6 +84,7 @@ def evaluate(
     device: torch.device,
     num_classes: int = 100,
 ) -> Dict[str, float]:
+    # Централизованная оценка после агрегации.
     model.eval()
 
     criterion = nn.CrossEntropyLoss()

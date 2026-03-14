@@ -1,3 +1,5 @@
+"""Агент хранения: данные клиентов, история и чекпоинты."""
+
 from __future__ import annotations
 
 import json
@@ -40,6 +42,7 @@ class StorageAgent:
         partition_mode: str = "iid",
         dirichlet_alpha: float = 0.3,
     ) -> ClientData:
+        # Подготавливаем train-данные для конкретного клиента.
         self.logger.info(
             "Preparing client data | "
             f"client_id={client_id} | num_clients={num_clients} | "
@@ -63,6 +66,7 @@ class StorageAgent:
         return data
 
     def save_history(self, history: dict[str, Any]) -> None:
+        # Сохраняем историю обучения в JSON.
         with open(self.history_path, "w", encoding="utf-8") as f:
             json.dump(history, f, ensure_ascii=False, indent=2)
         self.logger.info(f"History saved | path={self.history_path}")

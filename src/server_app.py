@@ -1,3 +1,5 @@
+"""Сервер Flower: оркестрация раундов и серверная оценка модели."""
+
 from __future__ import annotations
 
 from flwr.common import Context, ndarrays_to_parameters
@@ -9,7 +11,7 @@ from src.agents.aggregation_agent import (
     AggregationAgent,
 )
 from src.agents.storage_agent import StorageAgent
-from src.data import load_server_test_loader
+from src.data import load_server_test_loader, load_server_train_loader
 from src.logger import get_logger
 from src.model import get_device, get_model
 from src.train import evaluate
@@ -21,6 +23,7 @@ logger = get_logger("ServerApp")
 
 
 def _to_bool(value) -> bool:
+    # Нормализуем булевы значения из run_config.
     if isinstance(value, bool):
         return value
     text = str(value).strip().lower()
@@ -28,6 +31,7 @@ def _to_bool(value) -> bool:
 
 
 def server_fn(context: Context) -> ServerAppComponents:
+    # Точка входа серверного приложения Flower.
     run_config = context.run_config
 
     num_rounds = int(run_config["num-server-rounds"])
@@ -52,9 +56,11 @@ def server_fn(context: Context) -> ServerAppComponents:
     logger.info(f"Server evaluation device: {device}")
 
     model = get_model(num_classes=100).to(device)
+    train_loader = load_server_train_loader(batch_size=256, num_workers=0)
     test_loader = load_server_test_loader(batch_size=256, num_workers=0)
 
     def fit_config(server_round: int):
+        # Конфиг локального обучения, который отправляется клиентам.
         logger.info(f"ROUND {server_round} START")
         cfg = {
             "server_round": server_round,
@@ -71,12 +77,19 @@ def server_fn(context: Context) -> ServerAppComponents:
     aggregation_agent = AggregationAgent(model=model, storage=storage)
 
     def server_evaluate(server_round: int, parameters, config):
+        # Оценка агрегированной модели на тестовом наборе сервера.
         logger.info(f"ROUND {server_round} -> server-side evaluation START")
 
         # parameters here is already a list of ndarrays
         set_parameters(model, parameters)
 
-        metrics = evaluate(
+        train_metrics = evaluate(
+            model=model,
+            loader=train_loader,
+            device=device,
+            num_classes=100,
+        )
+        test_metrics = evaluate(
             model=model,
             loader=test_loader,
             device=device,
@@ -85,21 +98,22 @@ def server_fn(context: Context) -> ServerAppComponents:
 
         logger.info(
             f"ROUND {server_round} -> server-side evaluation END | "
-            f"loss={metrics['loss']:.4f} | "
-            f"acc={metrics['accuracy']:.4f} | "
-            f"f1_macro={metrics['f1_macro']:.4f} | "
-            f"f1_weighted={metrics['f1_weighted']:.4f}"
+            f"train_loss={train_metrics['loss']:.4f} | "
+            f"train_acc={train_metrics['accuracy']:.4f} | "
+            f"test_loss={test_metrics['loss']:.4f} | "
+            f"test_acc={test_metrics['accuracy']:.4f}"
         )
 
         aggregation_agent.on_server_evaluate_end(
             server_round=server_round,
-            metrics=metrics,
+            test_metrics=test_metrics,
+            train_metrics=train_metrics,
         )
 
-        return float(metrics["loss"]), {
-            "accuracy": float(metrics["accuracy"]),
-            "f1_macro": float(metrics["f1_macro"]),
-            "f1_weighted": float(metrics["f1_weighted"]),
+        return float(test_metrics["loss"]), {
+            "accuracy": float(test_metrics["accuracy"]),
+            "f1_macro": float(test_metrics["f1_macro"]),
+            "f1_weighted": float(test_metrics["f1_weighted"]),
         }
 
     if decentralized_mode:

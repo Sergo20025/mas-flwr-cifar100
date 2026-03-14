@@ -1,3 +1,5 @@
+"""Определение архитектуры WideResNet для CIFAR-100."""
+
 from __future__ import annotations
 
 import torch
@@ -53,6 +55,7 @@ class BasicBlock(nn.Module):
             self.shortcut = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Pre-activation блок: BN/ReLU перед сверткой.
         out = self.relu1(self.bn1(x))
         shortcut = x if self.equal_in_out else self.shortcut(out)
 
@@ -162,6 +165,7 @@ class WideResNet(nn.Module):
                 nn.init.constant_(m.bias, 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Последовательный проход по трем группам residual-блоков.
         out = self.conv1(x)
         out = self.block1(out)
         out = self.block2(out)
@@ -178,6 +182,7 @@ def get_device() -> torch.device:
 
 
 def get_model(num_classes: int = 100) -> nn.Module:
+    # Единая точка создания модели для серверной и клиентской частей.
     return WideResNet(
         depth=28,
         widen_factor=10,

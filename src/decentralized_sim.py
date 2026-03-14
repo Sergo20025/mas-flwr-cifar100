@@ -1,3 +1,5 @@
+"""Standalone симулятор децентрализованного обучения (без ServerStrategy Flower)."""
+
 from __future__ import annotations
 
 import copy
@@ -36,6 +38,7 @@ class Node:
 
 
 def _load_run_config(path: str = "pyproject.toml") -> dict:
+    # Читаем параметры запуска из pyproject.toml.
     pyproject_path = Path(path)
     if not pyproject_path.exists():
         raise FileNotFoundError("pyproject.toml not found")
@@ -47,6 +50,7 @@ def _load_run_config(path: str = "pyproject.toml") -> dict:
 
 
 def _ring_neighbors(node_id: int, num_nodes: int) -> list[int]:
+    # В ring-топологии у узла два соседа.
     if num_nodes <= 1:
         return [node_id]
     if num_nodes == 2:
@@ -68,6 +72,7 @@ def _save_json(path: Path, payload: dict) -> None:
 
 
 def main() -> None:
+    # Полный цикл децентрализованного обучения по раундам.
     cfg = _load_run_config()
 
     num_rounds = int(cfg.get("num-server-rounds", 50))
@@ -142,6 +147,7 @@ def main() -> None:
 
         local_updates: dict[int, tuple[list[np.ndarray], int, dict[str, float]]] = {}
         for node in nodes:
+            # Шаг 1: локальное обучение на каждом узле.
             updated_params, num_examples, fit_metrics = node.compute.fit(
                 parameters=node.params,
                 local_epochs=local_epochs,
@@ -155,6 +161,7 @@ def main() -> None:
         mean_delta_norm = 0.0
 
         for node in nodes:
+            # Шаг 2: neighbor-агрегация в ring-топологии.
             neighbors = _ring_neighbors(node.node_id, num_nodes)
             peer_updates = [
                 (local_updates[peer_id][1], local_updates[peer_id][0])
@@ -197,6 +204,7 @@ def main() -> None:
         )
 
         logger.info(
+            # Шаг 3: серверная оценка агрегированного состояния.
             "ROUND END | "
             f"round={server_round} | "
             f"train_loss={avg_train_loss:.4f} | "

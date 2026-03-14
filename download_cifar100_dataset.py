@@ -1,3 +1,5 @@
+"""Скрипт для загрузки CIFAR-100 из Hugging Face и сохранения в структуру папок."""
+
 from pathlib import Path
 from datasets import load_dataset
 from tqdm import tqdm
@@ -7,6 +9,7 @@ DATASET_NAME = "uoft-cs/cifar100"
 
 
 def save_split(dataset_split, output_dir):
+    # Сохраняем изображения по папкам классов.
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for item in tqdm(dataset_split):
@@ -24,7 +27,7 @@ def save_split(dataset_split, output_dir):
 
 
 def main():
-
+    # Загружаем train/test и сохраняем в локальную директорию data/cifar100.
     root = Path("data")
     dataset_dir = root / "cifar100"
 

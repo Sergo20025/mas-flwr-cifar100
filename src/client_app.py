@@ -1,3 +1,5 @@
+"""Flower-клиент: связывает ComputeAgent с клиентским API."""
+
 from __future__ import annotations
 
 from flwr.client import NumPyClient
@@ -18,6 +20,7 @@ class CifarClient(NumPyClient):
         return self.agent.get_parameters()
 
     def fit(self, parameters, config):
+        # Запускаем локальное обучение на текущем клиенте.
         round_num = int(config.get("server_round", -1))
         local_epochs = int(config.get("local_epochs", 1))
         lr = float(config.get("lr", 0.01))
@@ -33,7 +36,7 @@ class CifarClient(NumPyClient):
             round_num=round_num,
         )
 
-    # Клиентская evaluate отключена, сервер оценивает сам глобальную модель.
+    # Клиентская evaluate отключена: сервер оценивает агрегированную модель.
 
 
 def client_fn(context: Context):

@@ -1,3 +1,5 @@
+"""Агент агрегации и стратегии Flower (централизованная и децентрализованная)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -27,6 +29,8 @@ class AggregationAgent:
         self.history: dict[str, list[dict[str, float]]] = {
             "fit_metrics": [],
             "server_evaluate": [],
+            "server_evaluate_train": [],
+            "server_evaluate_test": [],
         }
 
         self.best_accuracy = 0.0
@@ -35,6 +39,7 @@ class AggregationAgent:
         self.logger.info("Aggregation agent initialized")
 
     def weighted_average(self, metrics):
+        # Взвешенное усреднение клиентских метрик по количеству примеров.
         if not metrics:
             return {}
 
@@ -66,43 +71,62 @@ class AggregationAgent:
             set_parameters(self.model, ndarrays)
             self.storage.save_checkpoint(server_round, self.model.state_dict())
 
-        self.history["fit_metrics"].append(
-            {
-                "round": float(server_round),
-                **{k: float(v) for k, v in metrics.items() if isinstance(v, (int, float))},
-            }
-        )
+        fit_entry: dict[str, object] = {"round": float(server_round)}
+        for key, value in metrics.items():
+            if isinstance(value, (int, float)):
+                fit_entry[key] = float(value)
+            elif key == "train_loss_distribution" and isinstance(value, list):
+                fit_entry[key] = [float(item) for item in value]
+        self.history["fit_metrics"].append(fit_entry)
         self.storage.save_history(self.history)
 
-    def on_server_evaluate_end(self, server_round: int, metrics: dict[str, float]):
+    def on_server_evaluate_end(
+        self,
+        server_round: int,
+        test_metrics: dict[str, float],
+        train_metrics: dict[str, float] | None = None,
+    ):
         self.logger.info(
             "SERVER EVAL | "
             f"round={server_round} | "
-            f"loss={metrics['loss']:.4f} | "
-            f"acc={metrics['accuracy']:.4f} | "
-            f"f1_macro={metrics['f1_macro']:.4f} | "
-            f"f1_weighted={metrics['f1_weighted']:.4f}"
+            f"test_loss={test_metrics['loss']:.4f} | "
+            f"test_acc={test_metrics['accuracy']:.4f} | "
+            f"test_f1_macro={test_metrics['f1_macro']:.4f} | "
+            f"test_f1_weighted={test_metrics['f1_weighted']:.4f}"
         )
 
         self.history["server_evaluate"].append(
             {
                 "round": float(server_round),
-                **{k: float(v) for k, v in metrics.items()},
+                **{k: float(v) for k, v in test_metrics.items()},
             }
         )
+        self.history["server_evaluate_test"].append(
+            {
+                "round": float(server_round),
+                **{k: float(v) for k, v in test_metrics.items()},
+            }
+        )
+        if train_metrics is not None:
+            self.history["server_evaluate_train"].append(
+                {
+                    "round": float(server_round),
+                    **{k: float(v) for k, v in train_metrics.items()},
+                }
+            )
         self.storage.save_history(self.history)
 
-        if metrics["accuracy"] > self.best_accuracy:
-            self.best_accuracy = metrics["accuracy"]
+        if test_metrics["accuracy"] > self.best_accuracy:
+            self.best_accuracy = test_metrics["accuracy"]
             self.logger.info(
-                f"NEW BEST ACC MODEL | round={server_round} | acc={metrics['accuracy']:.4f}"
+                f"NEW BEST ACC MODEL | round={server_round} | acc={test_metrics['accuracy']:.4f}"
             )
             self.storage.save_best_checkpoint(self.model.state_dict())
 
-        if metrics["f1_macro"] > self.best_f1_macro:
-            self.best_f1_macro = metrics["f1_macro"]
+        if test_metrics["f1_macro"] > self.best_f1_macro:
+            self.best_f1_macro = test_metrics["f1_macro"]
             self.logger.info(
-                f"NEW BEST F1 MODEL | round={server_round} | f1_macro={metrics['f1_macro']:.4f}"
+                f"NEW BEST F1 MODEL | round={server_round} | f1_macro={test_metrics['f1_macro']:.4f}"
             )
 
     def get_history(self):
@@ -119,19 +143,27 @@ class AgentFedAvg(FedAvg):
         self.logger.info(
             f"AGGREGATE FIT | round={server_round} | clients={len(results)} | failures={len(failures)}"
         )
+        train_loss_distribution = [
+            float(fit_res.metrics["train_loss"])
+            for _, fit_res in results
+            if "train_loss" in fit_res.metrics
+        ]
 
         aggregated_parameters, aggregated_metrics = super().aggregate_fit(
             server_round,
             results,
             failures,
         )
+        aggregated_metrics = aggregated_metrics or {}
+        if train_loss_distribution:
+            aggregated_metrics["train_loss_distribution"] = train_loss_distribution
 
         self.logger.info(f"GLOBAL MODEL UPDATED | round={server_round}")
 
         self.aggregation_agent.on_fit_end(
             server_round,
             aggregated_parameters,
-            aggregated_metrics or {},
+            aggregated_metrics,
         )
 
         return aggregated_parameters, aggregated_metrics
@@ -177,6 +209,7 @@ class DecentralizedAggregationAgent:
         current_params: list[np.ndarray],
         peer_updates: list[tuple[int, list[np.ndarray]]],
     ) -> tuple[list[np.ndarray], float, bool]:
+        # Принимаем новое состояние только при изменении выше порога.
         candidate = self.weighted_average_parameters(peer_updates)
         delta_norm = self.delta_l2_norm(current_params, candidate)
         accepted = delta_norm >= self.min_delta_norm
@@ -239,6 +272,7 @@ class AgentDecentralizedFlower(FedAvg):
         parameters: Parameters,
         client_manager: ClientManager,
     ) -> list[tuple[ClientProxy, FitIns]]:
+        # Отправляем каждому клиенту параметры его логического узла.
         if server_round == 1 and not self.node_params:
             init_nd = parameters_to_ndarrays(parameters)
             self.node_params = {
@@ -276,6 +310,7 @@ class AgentDecentralizedFlower(FedAvg):
         return fit_cfg
 
     def _ring_neighbors(self, node_id: int) -> list[int]:
+        # Кольцевая топология: текущий узел плюс левый и правый соседи.
         if self.num_nodes <= 1:
             return [node_id]
         if self.num_nodes == 2:
@@ -309,6 +344,7 @@ class AgentDecentralizedFlower(FedAvg):
         return float(np.sqrt(sq_sum))
 
     def aggregate_fit(self, server_round, results, failures):
+        # Выполняем децентрализованную агрегацию обновлений по ring-соседям.
         self.logger.info(
             f"DECENTRALIZED AGGREGATE FIT | round={server_round} | clients={len(results)} | failures={len(failures)}"
         )
@@ -317,6 +353,7 @@ class AgentDecentralizedFlower(FedAvg):
 
         client_updates: dict[int, tuple[NDArrays, int]] = {}
         fit_metrics: list[tuple[int, dict[str, Scalar]]] = []
+        train_loss_distribution: list[float] = []
 
         for client_proxy, fit_res in results:
             cid = int(fit_res.metrics.get("cid", 0))
@@ -329,6 +366,8 @@ class AgentDecentralizedFlower(FedAvg):
             cleaned_metrics = {
                 k: v for k, v in fit_res.metrics.items() if k != "cid"
             }
+            if "train_loss" in cleaned_metrics:
+                train_loss_distribution.append(float(cleaned_metrics["train_loss"]))
             fit_metrics.append((num_examples, cleaned_metrics))
 
         new_node_params: dict[int, NDArrays] = {}
@@ -368,6 +407,8 @@ class AgentDecentralizedFlower(FedAvg):
         aggregated_metrics: dict[str, Scalar] = {}
         if self.fit_metrics_aggregation_fn:
             aggregated_metrics = self.fit_metrics_aggregation_fn(fit_metrics)
+        if train_loss_distribution:
+            aggregated_metrics["train_loss_distribution"] = train_loss_distribution
 
         aggregated_metrics["accepted_nodes_ratio"] = float(
             accepted_nodes / float(max(self.num_nodes, 1))

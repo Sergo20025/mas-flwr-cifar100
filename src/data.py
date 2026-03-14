@@ -1,3 +1,5 @@
+"""Загрузка CIFAR-100 и разбиение данных по клиентам (IID/non-IID)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -34,6 +36,7 @@ class HFDatasetWrapper(Dataset):
 
 
 def _load_dataset():
+    # Используем кэш в папке проекта, чтобы не скачивать датасет повторно.
     cache_dir = Path("data") / "hf_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
     return load_dataset("uoft-cs/cifar100", cache_dir=str(cache_dir))
@@ -67,6 +70,7 @@ def _partition_iid_indices(
     num_clients: int,
     seed: int,
 ) -> list[list[int]]:
+    # Равномерное случайное разбиение индексов.
     all_indices = np.arange(num_samples)
     rng = np.random.RandomState(seed)
     rng.shuffle(all_indices)
@@ -81,6 +85,7 @@ def _partition_dirichlet_indices(
     min_size: int = 10,
     max_retries: int = 20,
 ) -> list[list[int]]:
+    # Dirichlet-разбиение: моделирует неоднородность данных между клиентами.
     if alpha <= 0:
         raise ValueError(f"dirichlet alpha must be > 0, got {alpha}")
 
@@ -95,6 +100,7 @@ def _partition_dirichlet_indices(
             class_indices = indices[labels == class_id]
             rng.shuffle(class_indices)
 
+            # Для каждого класса генерируем доли клиентов.
             proportions = rng.dirichlet(np.repeat(alpha, num_clients))
             split_points = (np.cumsum(proportions) * len(class_indices)).astype(int)[:-1]
             class_splits = np.split(class_indices, split_points)
@@ -137,6 +143,7 @@ def load_cifar100_partitioned(
     partition_mode: str = "iid",
     dirichlet_alpha: float = 0.3,
 ) -> ClientData:
+    # Общая функция загрузки партиции клиента (iid/dirichlet).
     dataset = _load_dataset()
     train_hf = dataset["train"]
 
@@ -155,6 +162,7 @@ def load_cifar100_partitioned(
             seed=seed,
         )
     elif mode in {"dirichlet", "non-iid", "noniid"}:
+        # В non-IID режиме используем распределение Dirichlet по классам.
         labels = np.asarray(train_hf["fine_label"], dtype=np.int64)
         split_indices = _partition_dirichlet_indices(
             labels=labels,
@@ -186,6 +194,67 @@ def load_cifar100_partitioned(
     )
 
 
+def get_partition_indices(
+    num_clients: int,
+    seed: int = 42,
+    partition_mode: str = "iid",
+    dirichlet_alpha: float = 0.3,
+) -> list[list[int]]:
+    dataset = _load_dataset()
+    train_hf = dataset["train"]
+
+    mode = partition_mode.strip().lower()
+    if mode == "iid":
+        return _partition_iid_indices(
+            num_samples=len(train_hf),
+            num_clients=num_clients,
+            seed=seed,
+        )
+    if mode in {"dirichlet", "non-iid", "noniid"}:
+        labels = np.asarray(train_hf["fine_label"], dtype=np.int64)
+        return _partition_dirichlet_indices(
+            labels=labels,
+            num_clients=num_clients,
+            alpha=float(dirichlet_alpha),
+            seed=seed,
+        )
+
+    raise ValueError(
+        f"Unknown partition_mode '{partition_mode}'. Use 'iid' or 'dirichlet'."
+    )
+
+
+def get_partition_class_counts(
+    num_clients: int,
+    seed: int = 42,
+    partition_mode: str = "iid",
+    dirichlet_alpha: float = 0.3,
+) -> np.ndarray:
+    dataset = _load_dataset()
+    train_hf = dataset["train"]
+    labels = np.asarray(train_hf["fine_label"], dtype=np.int64)
+    num_classes = int(labels.max()) + 1
+
+    split_indices = get_partition_indices(
+        num_clients=num_clients,
+        seed=seed,
+        partition_mode=partition_mode,
+        dirichlet_alpha=dirichlet_alpha,
+    )
+
+    class_counts = np.zeros((num_clients, num_classes), dtype=np.int64)
+    for client_id, client_indices in enumerate(split_indices):
+        if not client_indices:
+            continue
+        client_labels = labels[np.asarray(client_indices, dtype=np.int64)]
+        class_counts[client_id] = np.bincount(
+            client_labels,
+            minlength=num_classes,
+        )
+
+    return class_counts
+
+
 def load_server_test_loader(
     batch_size: int = 128,
     num_workers: int = 0,
@@ -205,3 +274,24 @@ def load_server_test_loader(
     )
 
     return test_loader
+
+
+def load_server_train_loader(
+    batch_size: int = 128,
+    num_workers: int = 0,
+) -> DataLoader:
+    dataset = _load_dataset()
+    train_hf = dataset["train"]
+
+    _, test_transform = _get_transforms()
+    train_dataset = HFDatasetWrapper(train_hf, test_transform)
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=torch.cuda.is_available(),
+    )
+
+    return train_loader
